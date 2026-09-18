@@ -271,6 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>⏰ ${schedLabel}</span>
             <span>📁 ${escapeHtml(job.targetDir || 'Privzeto')}</span>
             <span>🎯 ${job.mediaTypeFilter === 'movies' ? 'Samo Filmi' : (job.mediaTypeFilter === 'shows' ? 'Samo Serije' : 'Vse')}</span>
+            ${job.titleFilter ? `<span style="color:#a78bfa; font-weight:600;">🎯 ${escapeHtml(job.titleFilter)}</span>` : ''}
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
             <span style="font-size: 0.75rem; color: var(--text-muted);">Zadnji zagon: ${job.lastRun || 'Nikoli'}</span>
@@ -279,6 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <button type="button" class="btn btn-primary btn-sm btn-job-run" data-id="${job.id}" ${isRunning ? 'disabled' : ''}>
                 ${isRunning ? '⏳ Teče...' : '▶️ Zaženi'}
               </button>
+              <button type="button" class="btn btn-outline btn-sm btn-job-delete" data-id="${job.id}" title="Odstrani opravilo" style="color:#ef4444;">🗑️</button>
             </div>
           </div>
         </div>
@@ -305,6 +307,33 @@ document.addEventListener('DOMContentLoaded', () => {
           const data = await res.json();
           if (data.success) {
             showToast('Opravilo zagnano!', 'success');
+          } else {
+            showToast(`Napaka: ${data.message}`, 'error');
+          }
+        } catch (err) {
+          showToast(`Napaka: ${err.message}`, 'error');
+        }
+      });
+    });
+
+    document.querySelectorAll('.btn-job-delete').forEach(b => {
+      b.addEventListener('click', async (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        const targetJob = allJobs.find(j => j.id === id);
+        if (!confirm(`Ali želite odstraniti opravilo:\n"${targetJob?.name || id}"?`)) return;
+
+        try {
+          const res = await fetch('/api/jobs/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId: id })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showToast('Opravilo odstranjeno', 'success');
+            allJobs = data.jobs;
+            renderJobsList(allJobs);
+            updateQuickStats();
           } else {
             showToast(`Napaka: ${data.message}`, 'error');
           }
@@ -365,6 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('job-name').value = job.name || '';
     document.getElementById('job-target-dir').value = job.targetDir || '';
     document.getElementById('job-schedule').value = job.schedule || 'every_24h';
+    document.getElementById('job-title-filter').value = job.titleFilter || '';
     document.getElementById('job-media-type').value = job.mediaTypeFilter || 'all';
     document.getElementById('job-item-limit').value = job.itemLimit || 0;
     document.getElementById('job-min-year').value = job.minYear || '';
@@ -389,6 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
       name: formData.get('name'),
       targetDir: formData.get('targetDir'),
       schedule: formData.get('schedule'),
+      titleFilter: formData.get('titleFilter') ? formData.get('titleFilter').trim() : null,
       mediaTypeFilter: formData.get('mediaTypeFilter'),
       itemLimit: parseInt(formData.get('itemLimit') || '0', 10),
       minYear: formData.get('minYear') ? parseInt(formData.get('minYear'), 10) : null,
@@ -410,6 +441,81 @@ document.addEventListener('DOMContentLoaded', () => {
         renderJobsList(allJobs);
         jobModal.style.display = 'none';
         updateQuickStats();
+      } else {
+        showToast(`Napaka: ${data.message}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Napaka: ${err.message}`, 'error');
+    }
+  });
+
+  // ==========================================
+  // Track Series Modal & Workflow
+  // ==========================================
+  const trackModal = document.getElementById('track-modal');
+  const trackModalForm = document.getElementById('track-modal-form');
+  const trackModalCloseBtn = document.getElementById('track-modal-close-btn');
+  const trackModalCancelBtn = document.getElementById('track-modal-cancel-btn');
+  const trackModalSeriesDisplay = document.getElementById('track-modal-series-display');
+  const trackSeriesNameInput = document.getElementById('track-series-name');
+  const trackSeriesUrlInput = document.getElementById('track-series-url');
+  const trackTargetDirInput = document.getElementById('track-target-dir');
+  const trackScheduleSelect = document.getElementById('track-schedule-select');
+
+  function openTrackSeriesModal(seriesName, seriesUrl = '', targetDir = '') {
+    if (!trackModal) return;
+    trackSeriesNameInput.value = seriesName;
+    trackSeriesUrlInput.value = seriesUrl;
+    trackTargetDirInput.value = targetDir || globalConfig?.showsDir || '/media/ShowsVoyo';
+    trackModalSeriesDisplay.textContent = seriesName;
+    trackModal.style.display = 'flex';
+  }
+
+  trackModalCloseBtn?.addEventListener('click', () => trackModal.style.display = 'none');
+  trackModalCancelBtn?.addEventListener('click', () => trackModal.style.display = 'none');
+
+  trackModalForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const seriesName = trackSeriesNameInput.value.trim();
+    const seriesUrl = trackSeriesUrlInput.value.trim();
+    const schedule = trackScheduleSelect.value;
+    const targetDir = trackTargetDirInput.value.trim() || globalConfig?.showsDir || '/media/ShowsVoyo';
+
+    const newJob = {
+      id: `track_${Date.now()}`,
+      name: `🔔 Spremljanje: ${seriesName}`,
+      enabled: true,
+      schedule,
+      targetDir,
+      mediaTypeFilter: 'shows',
+      titleFilter: seriesUrl || seriesName,
+      itemLimit: 0,
+      minYear: null,
+      minRating: null,
+      selectedGenres: [],
+      languagePreference: 'sl'
+    };
+
+    try {
+      const res = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newJob)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Začeto spremljanje serije "${seriesName}"!`, 'success');
+        allJobs = data.jobs;
+        renderJobsList(allJobs);
+        trackModal.style.display = 'none';
+        updateQuickStats();
+
+        // Immediately trigger first check in background
+        fetch('/api/jobs/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId: newJob.id, force: false })
+        }).catch(() => {});
       } else {
         showToast(`Napaka: ${data.message}`, 'error');
       }
@@ -655,6 +761,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <td style="padding: 0.5rem 0.7rem; text-align: right; white-space: nowrap;">
             ${!item.isDirectory && (item.name.endsWith('.nfo') || item.name.endsWith('.strm') || item.name.endsWith('.vtt') || item.name.endsWith('.srt') || item.name.endsWith('.jpg'))
               ? `<button type="button" class="btn btn-outline btn-sm btn-explorer-view" data-path="${escapeHtml(item.path)}" title="Odpri">👁️</button>` : ''}
+            ${item.isDirectory && !item.name.toLowerCase().startsWith('season')
+              ? `<button type="button" class="btn btn-outline btn-sm btn-explorer-track" data-name="${escapeHtml(item.name)}" data-path="${escapeHtml(item.path)}" title="Avtomatsko spremljaj to serijo" style="color:#a78bfa;">🔔</button>` : ''}
             ${item.isDirectory
               ? `<button type="button" class="btn btn-outline btn-sm btn-explorer-refresh-meta" data-path="${escapeHtml(item.path)}" title="Osveži metapodatke">🔄</button>` : ''}
             <button type="button" class="btn btn-outline btn-sm btn-explorer-delete" data-path="${escapeHtml(item.path)}" title="Izbriši" style="color:#ef4444;">🗑️</button>
@@ -676,6 +784,19 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.addEventListener('click', async (e) => {
         const p = e.currentTarget.getAttribute('data-path');
         openFileViewer(p);
+      });
+    });
+
+    // Track series from explorer
+    explorerTableBody.querySelectorAll('.btn-explorer-track').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const name = e.currentTarget.getAttribute('data-name');
+        const p = e.currentTarget.getAttribute('data-path');
+        // Clean year if present (e.g. "Otok ljubezni Adria (2026)" -> "Otok ljubezni Adria")
+        const cleanName = name.replace(/\s*\(\d{4}\)$/, '');
+        const parentDir = p.substring(0, Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')));
+        openTrackSeriesModal(cleanName, '', parentDir);
       });
     });
 
@@ -945,6 +1066,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td style="padding: 0.6rem 0.8rem; color: #94a3b8;">${typeLabel}</td>
           <td style="padding: 0.6rem 0.8rem; color: #94a3b8;">${yearStr}</td>
           <td style="padding: 0.6rem 0.8rem; text-align: right; white-space: nowrap;">
+            ${it.isSeries ? `<button type="button" class="btn btn-outline btn-sm btn-track-single" data-name="${escapeHtml(it.title || it.name)}" data-url="${safeUrl}" title="Samodejno spremljaj to serijo" style="margin-right:0.35rem; color:#a78bfa;">🔔 Spremljaj</button>` : ''}
             <button type="button" class="btn btn-primary btn-sm btn-sync-single" data-url="${safeUrl}" title="Prenesi samo to vsebino">▶️ Prenesi</button>
           </td>
         </tr>
@@ -960,6 +1082,15 @@ document.addEventListener('DOMContentLoaded', () => {
           target._selected = e.target.checked;
         }
         updateSelectedButtonState();
+      });
+    });
+
+    // Attach track series button
+    previewItemsBody.querySelectorAll('.btn-track-single').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const name = e.currentTarget.getAttribute('data-name');
+        const url = e.currentTarget.getAttribute('data-url');
+        openTrackSeriesModal(name, url);
       });
     });
 

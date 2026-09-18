@@ -918,6 +918,7 @@ export class SyncEngine {
     this.minRating = options.minRating || null;
     this.limit = options.limit || null;
     this.languagePreference = options.languagePreference || 'sl';
+    this.titleFilter = options.titleFilter || null;
 
     this.client = new VoyoClient({
       apiUrl: options.apiUrl || CONFIG.apiBaseUrl,
@@ -1150,11 +1151,31 @@ export class SyncEngine {
   }
 
   /**
-   * Run full catalog sync
+   * Run catalog or targeted series synchronization
    */
   async syncCatalog(onProgress = null) {
     console.log('🚀 Starting Voyo catalog synchronization...');
-    const catalogItems = await this.client.fetchCatalog({ limit: this.limit });
+    let catalogItems = [];
+
+    // If titleFilter is a direct Voyo URL (e.g. https://voyo.si/vsebina/otok-ljubezni-adria)
+    if (this.titleFilter && this.titleFilter.startsWith('http')) {
+      catalogItems = [{
+        url: this.titleFilter,
+        name: this.titleFilter.split('/').pop().replace(/-/g, ' '),
+        isSeries: true
+      }];
+    } else {
+      catalogItems = await this.client.fetchCatalog({ limit: this.limit });
+      if (this.titleFilter) {
+        const filterLower = this.titleFilter.toLowerCase().trim();
+        catalogItems = catalogItems.filter(item => {
+          const t = (item.title || item.name || '').toLowerCase();
+          const u = (item.url || '').toLowerCase();
+          return t.includes(filterLower) || u.includes(filterLower);
+        });
+        if (onProgress) onProgress(`🎯 Target filter "${this.titleFilter}" matched ${catalogItems.length} items.`);
+      }
+    }
 
     let count = 0;
     for (const item of catalogItems) {
@@ -1169,13 +1190,24 @@ export class SyncEngine {
 
         if (meta.type === 'movie' || meta.media_type === 1) {
           if (this.mediaTypeFilter === 'shows') continue;
-          if (onProgress) onProgress(`Processing Movie: ${meta.title || meta.name}`);
+          if (onProgress) onProgress(`🎬 Processing Movie: ${meta.title || meta.name}`);
           await this.processMovie(meta);
           count++;
         } else {
           if (this.mediaTypeFilter === 'movies') continue;
-          if (onProgress) onProgress(`Processing Series: ${meta.title || meta.name}`);
+          if (onProgress) onProgress(`📺 Checking Series: ${meta.title || meta.name}`);
+          const prevEpisodesCreated = this.stats.episodesCreated;
+          const prevEpisodesSkipped = this.stats.itemsSkipped;
           await this.processShow(meta);
+          const newEps = this.stats.episodesCreated - prevEpisodesCreated;
+          const skippedEps = this.stats.itemsSkipped - prevEpisodesSkipped;
+          if (onProgress) {
+            if (newEps > 0) {
+              onProgress(`  ✨ Added ${newEps} new episode(s) for "${meta.title || meta.name}"!`);
+            } else {
+              onProgress(`  ✔️ "${meta.title || meta.name}" is up to date (${skippedEps} existing episodes skipped).`);
+            }
+          }
           count++;
         }
       } catch (err) {

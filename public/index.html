@@ -268,7 +268,7 @@
                 <label for="job-schedule">Urnik Samodejne Sinhronizacije</label>
                 <select id="job-schedule" name="schedule">
                   <option value="disabled">Onemogočeno (Samo ročni zagon)</option>
-                  <option value="every_1h">Vsako 1 uro</option>
+                  <option value="every_1h">Vsako 1 uro (Zelo priporočeno za spremljanje)</option>
                   <option value="every_2h">Vsaki 2 uri</option>
                   <option value="every_4h">Vsake 4 ure</option>
                   <option value="every_6h">Vsakih 6 ur</option>
@@ -276,6 +276,15 @@
                   <option value="every_12h">Vsakih 12 ur</option>
                   <option value="every_24h">Vsakih 24 ur (Dnevno)</option>
                 </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="grid-column: span 2;">
+                <label for="job-title-filter">🎯 Spremljaj specifično serijo / filter naslova (Neobvezno)</label>
+                <input type="text" id="job-title-filter" name="titleFilter"
+                  placeholder="npr. Otok ljubezni Adria ali https://voyo.si/vsebina/otok-ljubezni-adria" />
+                <span class="field-hint">Če vnesete ime ali povezavo serije, bo to opravilo v sekundi preverjalo samo to serijo in takoj preneslo nove dele!</span>
               </div>
             </div>
 
@@ -435,6 +444,48 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="logs-cancel-btn">Zapri</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Quick Track Series Modal -->
+    <div id="track-modal" class="modal">
+      <div class="modal-content" style="max-width: 520px; width: 95%;">
+        <div class="modal-header">
+          <div>
+            <h3 id="track-modal-title">🔔 Spremljaj Serijo</h3>
+            <span class="subtitle">Samodejno preverjanje novih epizod in osvežitev Jellyfina.</span>
+          </div>
+          <button type="button" class="modal-close-btn" id="track-modal-close-btn">&times;</button>
+        </div>
+        <form id="track-modal-form">
+          <div class="modal-body">
+            <input type="hidden" id="track-series-name" />
+            <input type="hidden" id="track-series-url" />
+            <input type="hidden" id="track-target-dir" />
+
+            <div style="padding: 0.75rem 1rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; margin-bottom: 1rem;">
+              <div style="font-size: 0.8rem; color: #a78bfa; font-weight: 600;">SERIJA ZA SPREMLJANJE:</div>
+              <div id="track-modal-series-display" style="font-size: 1.1rem; font-weight: 700; color: #fff; margin-top: 0.2rem;">-</div>
+            </div>
+
+            <div class="form-group">
+              <label for="track-schedule-select">Na koliko časa naj preverja nove dele?</label>
+              <select id="track-schedule-select" class="form-control" style="width: 100%; background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 0.6rem; color: #fff;">
+                <option value="every_1h" selected>⚡ Vsako 1 uro (Priporočeno za dnevne serije)</option>
+                <option value="every_2h">Vsaki 2 uri</option>
+                <option value="every_4h">Vsake 4 ure</option>
+                <option value="every_6h">Vsakih 6 ur</option>
+                <option value="every_12h">Vsakih 12 ur</option>
+                <option value="every_24h">Vsakih 24 ur (Dnevno)</option>
+              </select>
+              <span class="field-hint" style="margin-top: 0.4rem; display: block;">Ob vsakem preverjanju bo skripta v logu natančno zabeležila, ali je našla nove epizode ali jih je preskočila, ter avtomatsko osvežila Jellyfin.</span>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="track-modal-cancel-btn">Prekliči</button>
+            <button type="submit" class="btn btn-primary" id="track-modal-confirm-btn">🔔 Začni spremljati</button>
+          </div>
+        </form>
       </div>
     </div>
 

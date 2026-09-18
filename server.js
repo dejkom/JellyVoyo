@@ -391,6 +391,7 @@ export class VoyoManager {
         force,
         authToken: this.token,
         mediaTypeFilter: job.mediaTypeFilter || 'all',
+        titleFilter: job.titleFilter || null,
         limit: job.itemLimit || null
       });
 
