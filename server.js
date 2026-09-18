@@ -635,9 +635,14 @@ export class VoyoManager {
             }
 
             let masterContent = await masterRes.text();
-            // Rewrite sub-playlist URLs (hd.m3u8, etc.) to go through bridge /proxy/playlist
+            // Determine base URL (respect Host header from client / reverse proxy, or fallback to config)
+            const hostHeader = req.headers['x-forwarded-host'] || req.headers.host;
+            const protoHeader = req.headers['x-forwarded-proto'] || 'http';
+            const baseUrl = hostHeader ? `${protoHeader}://${hostHeader}` : (this.config.bridgeUrl || reqUrl.origin);
+
+            // Rewrite sub-playlist URLs (hd.m3u8, etc.) to go through bridge /proxy/playlist with absolute URL
             masterContent = masterContent.replace(/(https:\/\/[^\s\r\n]+\.m3u8[^\s\r\n]*)/g, (match) => {
-              return `/proxy/playlist?url=${encodeURIComponent(match)}`;
+              return `${baseUrl}/proxy/playlist?url=${encodeURIComponent(match)}`;
             });
 
             res.writeHead(200, {
@@ -664,6 +669,10 @@ export class VoyoManager {
           }
 
           try {
+            const hostHeader = req.headers['x-forwarded-host'] || req.headers.host;
+            const protoHeader = req.headers['x-forwarded-proto'] || 'http';
+            const baseUrl = hostHeader ? `${protoHeader}://${hostHeader}` : (this.config.bridgeUrl || reqUrl.origin);
+
             const plRes = await fetch(targetUrl, {
               headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -674,14 +683,14 @@ export class VoyoManager {
             if (!plRes.ok) throw new Error(`Playlist returned ${plRes.status}`);
             let content = await plRes.text();
 
-            // Rewrite AES-128 URI keys to route through /proxy/key
+            // Rewrite AES-128 URI keys to route through /proxy/key with absolute URL
             content = content.replace(/URI="([^"]+)"/g, (match, keyUrl) => {
-              return `URI="/proxy/key?url=${encodeURIComponent(keyUrl)}"`;
+              return `URI="${baseUrl}/proxy/key?url=${encodeURIComponent(keyUrl)}"`;
             });
 
-            // Rewrite TS segments to route through /proxy/segment
+            // Rewrite TS segments to route through /proxy/segment with absolute URL
             content = content.replace(/(https:\/\/[^\s\r\n]+\.ts[^\s\r\n]*)/g, (match) => {
-              return `/proxy/segment?url=${encodeURIComponent(match)}`;
+              return `${baseUrl}/proxy/segment?url=${encodeURIComponent(match)}`;
             });
 
             res.writeHead(200, {
