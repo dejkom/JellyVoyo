@@ -915,6 +915,38 @@ document.addEventListener('DOMContentLoaded', () => {
   // --------------------------------------------------------------------------
   let currentPreviewItems = [];
   let currentPreviewTab = 'all'; // 'all' | 'shows' | 'movies'
+  let previewSortColumn = 'year'; // default sort by year descending
+  let previewSortDirection = 'desc'; // 'asc' | 'desc'
+
+  function updateSortHeaderIcons() {
+    const iconTitle = document.getElementById('sort-icon-title');
+    const iconType = document.getElementById('sort-icon-type');
+    const iconYear = document.getElementById('sort-icon-year');
+
+    if (iconTitle) iconTitle.textContent = previewSortColumn === 'title' ? (previewSortDirection === 'asc' ? '▲' : '▼') : '↕';
+    if (iconType) iconType.textContent = previewSortColumn === 'type' ? (previewSortDirection === 'asc' ? '▲' : '▼') : '↕';
+    if (iconYear) iconYear.textContent = previewSortColumn === 'year' ? (previewSortDirection === 'asc' ? '▲' : '▼') : '↕';
+
+    if (iconTitle) iconTitle.style.color = previewSortColumn === 'title' ? '#a78bfa' : '#64748b';
+    if (iconType) iconType.style.color = previewSortColumn === 'type' ? '#a78bfa' : '#64748b';
+    if (iconYear) iconYear.style.color = previewSortColumn === 'year' ? '#a78bfa' : '#64748b';
+  }
+
+  function handleSortClick(colName) {
+    if (previewSortColumn === colName) {
+      previewSortDirection = previewSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      previewSortColumn = colName;
+      // Default year to desc, others to asc
+      previewSortDirection = colName === 'year' ? 'desc' : 'asc';
+    }
+    updateSortHeaderIcons();
+    renderPreviewModal(currentPreviewItems);
+  }
+
+  document.getElementById('th-sort-title')?.addEventListener('click', () => handleSortClick('title'));
+  document.getElementById('th-sort-type')?.addEventListener('click', () => handleSortClick('type'));
+  document.getElementById('th-sort-year')?.addEventListener('click', () => handleSortClick('year'));
 
   async function openCatalogPreview(triggerBtn, forceRefresh = false) {
     if (triggerBtn) {
@@ -965,6 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (previewCountShows) previewCountShows.textContent = totalShows;
         if (previewCountMovies) previewCountMovies.textContent = totalMovies;
 
+        updateSortHeaderIcons();
         renderPreviewModal(currentPreviewItems);
         updateSelectedButtonState();
         previewModal.style.display = 'flex';
@@ -1038,7 +1071,28 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (currentPreviewTab === 'movies') tabFiltered = items.filter(it => !it.isSeries);
 
     const q = (previewSearchInput?.value || '').toLowerCase().trim();
-    const filtered = tabFiltered.filter(it => (it.title || it.name || '').toLowerCase().includes(q));
+    let filtered = tabFiltered.filter(it => (it.title || it.name || '').toLowerCase().includes(q));
+
+    // Sort items according to active sort column and direction
+    filtered.sort((a, b) => {
+      let valA, valB;
+      if (previewSortColumn === 'year') {
+        valA = a.year ? parseInt(a.year, 10) : 0;
+        valB = b.year ? parseInt(b.year, 10) : 0;
+      } else if (previewSortColumn === 'type') {
+        valA = a.isSeries ? 'Serija' : 'Film';
+        valB = b.isSeries ? 'Serija' : 'Film';
+      } else {
+        valA = (a.title || a.name || '').toLowerCase();
+        valB = (b.title || b.name || '').toLowerCase();
+      }
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return previewSortDirection === 'asc' ? (valA - valB) : (valB - valA);
+      }
+      const cmp = String(valA).localeCompare(String(valB), 'sl');
+      return previewSortDirection === 'asc' ? cmp : -cmp;
+    });
 
     const tabLabel = currentPreviewTab === 'shows' ? 'serij' : (currentPreviewTab === 'movies' ? 'filmov' : 'vsebin');
     previewSummaryTags.innerHTML = `<span style="color:#a78bfa; font-weight:600;">Skupaj ${tabLabel}: ${tabFiltered.length} (Prikazano: ${Math.min(filtered.length, 300)} od ${filtered.length})</span>`;

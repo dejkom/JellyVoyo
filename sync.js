@@ -616,6 +616,10 @@ export class VoyoClient {
       const idMatch = fullUrl.match(/_(\d+)\.html/);
       if (idMatch) mediaId = parseInt(idMatch[1], 10);
 
+      // Fallback year from HTML metadata block (e.g. <div class="metadata mb-12"><span>2021</span>...)
+      const htmlYearMatch = html.match(/class=["']?metadata[^"']*["']?>[\s\S]*?<span>(\d{4})<\/span>/i);
+      const fallbackYear = htmlYearMatch ? htmlYearMatch[1] : '';
+
       // Return unified object
       if (movieData) {
         return {
@@ -630,7 +634,7 @@ export class VoyoClient {
           actor: movieData.actor || [],
           director: movieData.director || [],
           duration: movieData.duration,
-          year: extractYear(movieData.uploadDate || movieData.trailer?.uploadDate),
+          year: extractYear(movieData.uploadDate || movieData.trailer?.uploadDate, fallbackYear),
           imageUrl: movieData.image?.url || movieData.image,
           thumbnailUrl: movieData.thumbnailUrl || movieData.trailer?.thumbnailUrl
         };
@@ -647,7 +651,7 @@ export class VoyoClient {
           description: seriesData.description,
           genre: seriesData.genre || [],
           actor: seriesData.actor || [],
-          year: extractYear(seriesData.uploadDate || seriesData.trailer?.uploadDate),
+          year: extractYear(seriesData.uploadDate || seriesData.trailer?.uploadDate, fallbackYear),
           imageUrl: seriesData.image?.url || seriesData.image,
           thumbnailUrl: seriesData.thumbnailUrl,
           numberOfEpisodes: seriesData.numberOfEpisodes
@@ -857,14 +861,22 @@ export class VoyoClient {
           const res = await fetch(catUrl, { headers: this.headers });
           if (!res.ok) return [];
           const xml = await res.text();
-          return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
+          const entries = [];
+          const urlBlocks = xml.matchAll(/<url>([\s\S]*?)<\/url>/g);
+          for (const block of urlBlocks) {
+            const loc = block[1].match(/<loc>([^<]+)<\/loc>/)?.[1];
+            const lastmod = block[1].match(/<lastmod>([^<]+)<\/lastmod>/)?.[1];
+            if (loc) entries.push({ loc, lastmod });
+          }
+          return entries;
         } catch {
           return [];
         }
       }));
 
-      for (const locList of sitemapResults) {
-        for (const itemLoc of locList) {
+      for (const entryList of sitemapResults) {
+        for (const entry of entryList) {
+          const itemLoc = entry.loc;
           if (!itemLoc.includes('/vsebina/') || seenUrls.has(itemLoc)) continue;
           seenUrls.add(itemLoc);
 
@@ -872,6 +884,13 @@ export class VoyoClient {
           const rawSlug = itemLoc.split('/vsebina/')[1]
             .replace(/_\d+\.html$/, '')
             .replace(/\.html$/, '');
+
+          // Check if year is present in slug (e.g. "film-2022") or in lastmod (e.g. "2026-09-18...")
+          let year = extractYear(rawSlug);
+          if (!year && entry.lastmod) {
+            year = extractYear(entry.lastmod);
+          }
+
           const cleanTitle = rawSlug
             .split('-')
             .map(w => w.charAt(0).toUpperCase() + w.slice(1))
@@ -881,6 +900,7 @@ export class VoyoClient {
             title: cleanTitle,
             name: cleanTitle,
             url: itemLoc,
+            year: year || null,
             isSeries
           });
         }

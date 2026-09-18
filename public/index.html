@@ -393,10 +393,16 @@
               <thead>
                 <tr style="background: #141a29; color: #94a3b8; border-bottom: 1px solid #262c3b; position: sticky; top: 0; z-index: 10;">
                   <th style="padding: 0.6rem 0.8rem; width: 40px; text-align: center;">✓</th>
-                  <th style="padding: 0.6rem 0.8rem;">Naslov Vsebine</th>
-                  <th style="padding: 0.6rem 0.8rem; width: 90px;">Tip</th>
-                  <th style="padding: 0.6rem 0.8rem; width: 80px;">Leto</th>
-                  <th style="padding: 0.6rem 0.8rem; width: 110px; text-align: right;">Akcija</th>
+                  <th id="th-sort-title" style="padding: 0.6rem 0.8rem; cursor: pointer; user-select: none;" title="Kliknite za sortiranje po naslovu">
+                    Naslov Vsebine <span id="sort-icon-title" style="color: #64748b;">↕</span>
+                  </th>
+                  <th id="th-sort-type" style="padding: 0.6rem 0.8rem; width: 90px; cursor: pointer; user-select: none;" title="Kliknite za sortiranje po tipu">
+                    Tip <span id="sort-icon-type" style="color: #64748b;">↕</span>
+                  </th>
+                  <th id="th-sort-year" style="padding: 0.6rem 0.8rem; width: 85px; cursor: pointer; user-select: none;" title="Kliknite za sortiranje po letu">
+                    Leto <span id="sort-icon-year" style="color: #64748b;">↕</span>
+                  </th>
+                  <th style="padding: 0.6rem 0.8rem; width: 140px; text-align: right;">Akcija</th>
                 </tr>
               </thead>
               <tbody id="preview-items-body">
