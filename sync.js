@@ -689,38 +689,93 @@ export class VoyoClient {
       if (!res.ok) return [];
       const html = await res.text();
 
-      // Find episode links formatted as:
-      // <a onclick='return onPlayClick("63301690"),!1' data-uniq=63301690 data-season-episode-short=S1/E3 class=episode>
-      // ... <h3 class="title ...">3. del</h3> ... <div class="summary ...">Luka dobi novo nalogo...</div>
       const episodes = [];
-      const epRegex = /<a[^>]+data-uniq=["']?(\d+)["']?[^>]+data-season-episode-short=["']?S(\d+)\/E(\d+)["']?[^>]*>([\s\S]*?)<\/a>/gi;
-      let match;
+      const seenMediaIds = new Set();
 
-      while ((match = epRegex.exec(html)) !== null) {
-        const mediaId = parseInt(match[1], 10);
-        const seasonNum = parseInt(match[2], 10);
-        const episodeNum = parseInt(match[3], 10);
-        const blockHtml = match[4];
+      const parseEpisodeBlock = (sourceHtml) => {
+        const epRegex = /<a[^>]+data-uniq=["']?(\d+)["']?[^>]+data-season-episode-short=["']?S(\d+)\/E(\d+)["']?[^>]*>([\s\S]*?)<\/a>/gi;
+        let match;
+        while ((match = epRegex.exec(sourceHtml)) !== null) {
+          const mediaId = parseInt(match[1], 10);
+          if (seenMediaIds.has(mediaId)) continue;
+          seenMediaIds.add(mediaId);
 
-        const titleMatch = blockHtml.match(/<h[1-4][^>]*class=["'][^"']*title[^"']*["'][^>]*>([\s\S]*?)<\/h[1-4]>/i);
-        const epTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : `${episodeNum}. del`;
+          const seasonNum = parseInt(match[2], 10);
+          const episodeNum = parseInt(match[3], 10);
+          const blockHtml = match[4];
 
-        const summaryMatch = blockHtml.match(/class=["'][^"']*summary[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-        const epSummary = summaryMatch ? summaryMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+          const titleMatch = blockHtml.match(/<h[1-4][^>]*class=["'][^"']*title[^"']*["'][^>]*>([\s\S]*?)<\/h[1-4]>/i);
+          const epTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : `${episodeNum}. del`;
 
-        const imgMatch = blockHtml.match(/src=["']([^"']+)["']/i);
-        const epImg = imgMatch ? imgMatch[1] : null;
+          const summaryMatch = blockHtml.match(/class=["'][^"']*summary[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+          const epSummary = summaryMatch ? summaryMatch[1].replace(/<[^>]+>/g, '').trim() : '';
 
-        episodes.push({
-          media_id: mediaId,
-          season: seasonNum,
-          episode: episodeNum,
-          title: epTitle,
-          summary: epSummary,
-          imageUrl: epImg
-        });
+          const imgMatch = blockHtml.match(/src=["']([^"']+)["']/i);
+          const epImg = imgMatch ? imgMatch[1] : null;
+
+          episodes.push({
+            media_id: mediaId,
+            season: seasonNum,
+            episode: episodeNum,
+            title: epTitle,
+            summary: epSummary,
+            imageUrl: epImg
+          });
+        }
+      };
+
+      // 1. Parse episodes present on the main landing page
+      parseEpisodeBlock(html);
+
+      // 2. Check for multi-season data and category ID (e.g., data-category-id="1041" and data-season="Sezona 2")
+      const catIdMatch = html.match(/data-category-id=["']?(\d+)["']?/i);
+      const categoryId = catIdMatch ? catIdMatch[1] : null;
+
+      // Extract all season names from data-season-episodes or data-season attributes
+      const seasonNames = new Set();
+      const seasonEpDataMatch = html.match(/data-season-episodes='([^']+)'/i);
+      if (seasonEpDataMatch) {
+        try {
+          const seasonObj = JSON.parse(seasonEpDataMatch[1]);
+          if (Array.isArray(seasonObj)) {
+            for (const s of seasonObj) {
+              if (s.Season) seasonNames.add(s.Season);
+            }
+          }
+        } catch {}
       }
 
+      // Also check any data-season="Sezona X" elements
+      const dataSeasonMatches = [...html.matchAll(/data-season=["']([^"']+)["']/gi)];
+      for (const sm of dataSeasonMatches) {
+        seasonNames.add(sm[1]);
+      }
+
+      // 3. If multiple seasons exist, fetch the episodes for each remaining season
+      if (categoryId && seasonNames.size > 0) {
+        for (const seasonName of seasonNames) {
+          // Check if we already have episodes for this season from the landing page
+          const sNumMatch = seasonName.match(/\d+/);
+          const sNum = sNumMatch ? parseInt(sNumMatch[0], 10) : null;
+          const alreadyHaveSeason = sNum !== null && episodes.some(e => e.season === sNum);
+
+          if (!alreadyHaveSeason) {
+            try {
+              const seasonUrl = `https://voyo.si/info/voyocategory/${categoryId}/seasons/${encodeURIComponent(seasonName)}/episodes/episodes`;
+              const seasonRes = await fetch(seasonUrl, { headers: this.headers });
+              if (seasonRes.ok) {
+                const seasonHtml = await seasonRes.text();
+                parseEpisodeBlock(seasonHtml);
+              }
+            } catch (err) {
+              console.warn(`Error fetching ${seasonName} for ${fullUrl}: ${err.message}`);
+            }
+          }
+        }
+      }
+
+      // Sort episodes by season ascending, then episode ascending
+      episodes.sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
       return episodes;
     } catch (err) {
       console.warn(`Error fetching episodes for ${fullUrl}: ${err.message}`);
