@@ -226,6 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       document.getElementById('username').value = globalConfig.username || '';
       document.getElementById('password').value = globalConfig.password || '';
+      document.getElementById('streamMode').value = globalConfig.streamMode || 'proxy';
       document.getElementById('bridgeUrl').value = globalConfig.bridgeUrl || 'http://localhost:3851';
       document.getElementById('port').value = globalConfig.port || 3851;
       document.getElementById('jellyfinUrl').value = globalConfig.jellyfinUrl || '';
@@ -429,6 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
       profileName: selectedProfile ? selectedProfile.textContent.replace(/\s*\(.*\)$/, '') : '',
       bridgeUrl: document.getElementById('bridgeUrl').value.trim(),
       port: parseInt(document.getElementById('port').value, 10),
+      streamMode: document.getElementById('streamMode').value || 'proxy',
       jellyfinUrl: document.getElementById('jellyfinUrl').value.trim(),
       jellyfinApiKey: document.getElementById('jellyfinApiKey').value.trim(),
       jellyfinAutoRefresh: document.getElementById('jellyfinAutoRefresh').checked

@@ -458,7 +458,8 @@ export class VoyoClient {
       });
       const data = await res.json();
       if (data.data?.login?.token) {
-        this.token = data.data.login.token;
+        this.userToken = data.data.login.token;
+        this.token = this.userToken;
         console.log(`✅ Logged in successfully as ${data.data.login.nickname || email}`);
         return { success: true, user: data.data.login, token: this.token };
       }
@@ -510,7 +511,7 @@ export class VoyoClient {
    * Switch to a specific profile
    */
   async selectProfile(profileId, tokenOverride = null) {
-    const token = tokenOverride || this.token;
+    const token = tokenOverride || this.userToken || this.token;
     if (!token) return { success: false, message: 'No authentication token available' };
 
     try {
@@ -532,7 +533,9 @@ export class VoyoClient {
       });
       const data = await res.json();
       if (data.data?.loginProfile?.token) {
-        this.token = data.data.loginProfile.token;
+        this.profileToken = data.data.loginProfile.token;
+        this.token = this.profileToken;
+        this.activeProfileId = parseInt(profileId, 10);
         return { success: true, profile: data.data.loginProfile, token: this.token };
       }
       return { success: false, message: data.errors?.[0]?.message || 'Failed to select profile' };
@@ -545,7 +548,7 @@ export class VoyoClient {
    * Resolve video streaming URL via VideoUrlV2 query
    */
   async getVideoStream(mediaId, tokenOverride = null) {
-    const token = tokenOverride || this.token;
+    const token = tokenOverride || this.profileToken || this.token;
     const query = {
       query: `query VideoUrlV2($id: Int!, $siteId: Int) {
         videoUrlV2 (id: $id, siteId: $siteId) {

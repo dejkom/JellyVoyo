@@ -331,17 +331,21 @@ export class VoyoManager {
   }
 
   async resolveMedia(mediaId) {
-    if (!this.token) {
+    // Ensure authenticated and active profile selected
+    if (!this.token || !this.voyoClient.profileToken) {
       const auth = await this.login();
       if (!auth.success) throw new Error(auth.message);
+    } else if (this.config.profileId && this.voyoClient.activeProfileId !== this.config.profileId) {
+      // Switch profile if config changed
+      await this.voyoClient.selectProfile(this.config.profileId);
     }
 
-    let streamRes = await this.voyoClient.getVideoStream(mediaId, this.token);
+    let streamRes = await this.voyoClient.getVideoStream(mediaId);
     if (!streamRes.success) {
       // Re-login on auth expiry
-      this.appendLog(`🔄 Re-authenticating with Voyo for media ${mediaId}...`);
+      this.appendBridgeLog(`🔄 Re-authenticating with Voyo for media ${mediaId}...`);
       await this.login();
-      streamRes = await this.voyoClient.getVideoStream(mediaId, this.token);
+      streamRes = await this.voyoClient.getVideoStream(mediaId);
     }
 
     if (!streamRes.success || !streamRes.url) {
@@ -604,17 +608,153 @@ export class VoyoManager {
 
           try {
             const mediaInfo = await this.resolveMedia(mediaId);
-            this.appendBridgeLog(`▶️ Redirecting to HLS master playlist for media ID: ${mediaId}`);
-            // HTTP 302 redirect directly to signed HLS playlist
-            res.writeHead(302, {
-              'Location': mediaInfo.streamUrl,
-              'Access-Control-Allow-Origin': '*'
+
+            // If streamMode is 'redirect', perform HTTP 302
+            if (this.config.streamMode === 'redirect') {
+              this.appendBridgeLog(`▶️ [Redirect Mode] Redirecting to HLS master for media ID: ${mediaId}`);
+              res.writeHead(302, {
+                'Location': mediaInfo.streamUrl,
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end();
+              return;
+            }
+
+            // Default: Proxy mode (rewrites playlist to route through bridge)
+            this.appendBridgeLog(`▶️ [Proxy Mode] Serving proxied HLS master playlist for media ID: ${mediaId}`);
+            const masterRes = await fetch(mediaInfo.streamUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Origin': 'https://voyo.si',
+                'Referer': 'https://voyo.si/'
+              }
             });
-            res.end();
+
+            if (!masterRes.ok) {
+              throw new Error(`Master playlist returned status ${masterRes.status}`);
+            }
+
+            let masterContent = await masterRes.text();
+            // Rewrite sub-playlist URLs (hd.m3u8, etc.) to go through bridge /proxy/playlist
+            masterContent = masterContent.replace(/(https:\/\/[^\s\r\n]+\.m3u8[^\s\r\n]*)/g, (match) => {
+              return `/proxy/playlist?url=${encodeURIComponent(match)}`;
+            });
+
+            res.writeHead(200, {
+              'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'no-cache'
+            });
+            res.end(masterContent);
           } catch (err) {
             this.appendBridgeLog(`❌ Stream resolution failed for ID ${mediaId}: ${err.message}`);
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: err.message }));
+          }
+          return;
+        }
+
+        // Sub-playlist proxy: rewrites TS segments & AES Keys
+        if (reqUrl.pathname === '/proxy/playlist') {
+          const targetUrl = reqUrl.searchParams.get('url');
+          if (!targetUrl) {
+            res.writeHead(400);
+            res.end('Missing url param');
+            return;
+          }
+
+          try {
+            const plRes = await fetch(targetUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Origin': 'https://voyo.si',
+                'Referer': 'https://voyo.si/'
+              }
+            });
+            if (!plRes.ok) throw new Error(`Playlist returned ${plRes.status}`);
+            let content = await plRes.text();
+
+            // Rewrite AES-128 URI keys to route through /proxy/key
+            content = content.replace(/URI="([^"]+)"/g, (match, keyUrl) => {
+              return `URI="/proxy/key?url=${encodeURIComponent(keyUrl)}"`;
+            });
+
+            // Rewrite TS segments to route through /proxy/segment
+            content = content.replace(/(https:\/\/[^\s\r\n]+\.ts[^\s\r\n]*)/g, (match) => {
+              return `/proxy/segment?url=${encodeURIComponent(match)}`;
+            });
+
+            res.writeHead(200, {
+              'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'no-cache'
+            });
+            res.end(content);
+          } catch (err) {
+            res.writeHead(500);
+            res.end(err.message);
+          }
+          return;
+        }
+
+        // Key proxy: fetches decryption key directly with valid origin/referer
+        if (reqUrl.pathname === '/proxy/key') {
+          const keyUrl = reqUrl.searchParams.get('url');
+          if (!keyUrl) {
+            res.writeHead(400);
+            res.end('Missing key url');
+            return;
+          }
+
+          try {
+            const keyRes = await fetch(keyUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Origin': 'https://voyo.si',
+                'Referer': 'https://voyo.si/'
+              }
+            });
+            const keyBuffer = Buffer.from(await keyRes.arrayBuffer());
+            res.writeHead(200, {
+              'Content-Type': 'application/octet-stream',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=3600'
+            });
+            res.end(keyBuffer);
+          } catch (err) {
+            res.writeHead(500);
+            res.end(err.message);
+          }
+          return;
+        }
+
+        // Segment proxy: pipes MPEG-TS segments smoothly to Jellyfin with open CORS
+        if (reqUrl.pathname === '/proxy/segment') {
+          const segUrl = reqUrl.searchParams.get('url');
+          if (!segUrl) {
+            res.writeHead(400);
+            res.end('Missing segment url');
+            return;
+          }
+
+          try {
+            const segRes = await fetch(segUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Origin': 'https://voyo.si',
+                'Referer': 'https://voyo.si/'
+              }
+            });
+            const segBuffer = Buffer.from(await segRes.arrayBuffer());
+            res.writeHead(200, {
+              'Content-Type': 'video/mp2t',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=86400'
+            });
+            res.end(segBuffer);
+          } catch (err) {
+            res.writeHead(500);
+            res.end(err.message);
           }
           return;
         }
@@ -638,6 +778,7 @@ export class VoyoManager {
               this.config.profileName = updated.profileName !== undefined ? updated.profileName : this.config.profileName;
               this.config.bridgeUrl = updated.bridgeUrl ?? this.config.bridgeUrl;
               this.config.port = updated.port ?? this.config.port;
+              this.config.streamMode = updated.streamMode ?? this.config.streamMode ?? 'proxy';
               this.config.languagePreference = updated.languagePreference ?? this.config.languagePreference;
               this.config.jellyfinUrl = updated.jellyfinUrl !== undefined ? updated.jellyfinUrl : this.config.jellyfinUrl;
               this.config.jellyfinApiKey = updated.jellyfinApiKey !== undefined ? updated.jellyfinApiKey : this.config.jellyfinApiKey;
