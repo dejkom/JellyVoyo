@@ -843,23 +843,23 @@ export class VoyoClient {
 
     // 2. Fetch comprehensive catalog from high-priority category sitemaps in parallel
     const majorCategorySitemaps = [
-      'https://voyo.si/sitemaps/sites/30005/categories/316',  // Filmi (370+ filmov)
-      'https://voyo.si/sitemaps/sites/30005/categories/550',  // Serije / drame (220+ serij, 1600+ filmov)
-      'https://voyo.si/sitemaps/sites/30005/categories/549',  // Voyo Originali (Ja Chef, Hiša ljubezni, Za hribom)
-      'https://voyo.si/sitemaps/sites/30005/categories/965',  // Otok ljubezni Adria, Azija Ekspres, resničnostni šovi
-      'https://voyo.si/sitemaps/sites/30005/categories/544',  // MasterChef, kuharske oddaje
-      'https://voyo.si/sitemaps/sites/30005/categories/540',  // Sanjski moški, zabavne serije
-      'https://voyo.si/sitemaps/sites/30005/categories/1380', // Kriminalke, trilerji
-      'https://voyo.si/sitemaps/sites/30005/categories/554',  // Zgodbe, premiere
-      'https://voyo.si/sitemaps/sites/30005/categories/5',    // Otroške serije in sinhronizirani filmi
-      'https://voyo.si/sitemaps/sites/30005/categories/1820'  // Nemirna kri, balkanske serije
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/316', genre: 'Filmi' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/550', genre: 'Drama' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/549', genre: 'Slovenski' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/965', genre: 'Resničnostni šov' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/544', genre: 'Družinski' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/540', genre: 'Komedija' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/1380', genre: 'Kriminalka' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/554', genre: 'Drama' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/5', genre: 'Otroški' },
+      { url: 'https://voyo.si/sitemaps/sites/30005/categories/1820', genre: 'Balkanski' }
     ];
 
     try {
-      const sitemapResults = await Promise.all(majorCategorySitemaps.map(async catUrl => {
+      const sitemapResults = await Promise.all(majorCategorySitemaps.map(async catDef => {
         try {
-          const res = await fetch(catUrl, { headers: this.headers });
-          if (!res.ok) return [];
+          const res = await fetch(catDef.url, { headers: this.headers });
+          if (!res.ok) return { genre: catDef.genre, entries: [] };
           const xml = await res.text();
           const entries = [];
           const urlBlocks = xml.matchAll(/<url>([\s\S]*?)<\/url>/g);
@@ -868,16 +868,25 @@ export class VoyoClient {
             const lastmod = block[1].match(/<lastmod>([^<]+)<\/lastmod>/)?.[1];
             if (loc) entries.push({ loc, lastmod });
           }
-          return entries;
+          return { genre: catDef.genre, entries };
         } catch {
-          return [];
+          return { genre: catDef.genre, entries: [] };
         }
       }));
 
-      for (const entryList of sitemapResults) {
-        for (const entry of entryList) {
+      for (const res of sitemapResults) {
+        for (const entry of res.entries) {
           const itemLoc = entry.loc;
-          if (!itemLoc.includes('/vsebina/') || seenUrls.has(itemLoc)) continue;
+          if (!itemLoc.includes('/vsebina/')) continue;
+          
+          if (seenUrls.has(itemLoc)) {
+            const existing = items.find(i => i.url === itemLoc);
+            if (existing && res.genre && !existing.genres?.includes(res.genre)) {
+              if (!existing.genres) existing.genres = [];
+              existing.genres.push(res.genre);
+            }
+            continue;
+          }
           seenUrls.add(itemLoc);
 
           const isSeries = !itemLoc.includes('_');
@@ -901,7 +910,8 @@ export class VoyoClient {
             name: cleanTitle,
             url: itemLoc,
             year: year || null,
-            isSeries
+            isSeries,
+            genres: res.genre ? [res.genre] : []
           });
         }
       }

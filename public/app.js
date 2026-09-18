@@ -121,28 +121,44 @@ document.addEventListener('DOMContentLoaded', () => {
   const statSyncStatus = document.getElementById('stat-sync-status');
   const statJellyfinStatus = document.getElementById('stat-jellyfin-status');
 
+  function openModal(modalEl) {
+    if (!modalEl) return;
+    modalEl.style.display = 'flex';
+    document.body.classList.add('modal-open');
+  }
+
+  function closeModal(modalEl) {
+    if (!modalEl) return;
+    modalEl.style.display = 'none';
+    // Only remove modal-open if no other modals are currently visible
+    const anyOpen = document.querySelectorAll('.modal[style*="display: flex"]');
+    if (!anyOpen || anyOpen.length === 0) {
+      document.body.classList.remove('modal-open');
+    }
+  }
+
   toggleSettingsBtn?.addEventListener('click', () => {
-    settingsModal.style.display = 'flex';
+    openModal(settingsModal);
     loadVoyoProfiles();
   });
-  closeSettingsBtn?.addEventListener('click', () => settingsModal.style.display = 'none');
-  cancelSettingsBtn?.addEventListener('click', () => settingsModal.style.display = 'none');
+  closeSettingsBtn?.addEventListener('click', () => closeModal(settingsModal));
+  cancelSettingsBtn?.addEventListener('click', () => closeModal(settingsModal));
 
   // Logs modal controls
   btnOpenSyncLogs?.addEventListener('click', () => {
-    logsModal.style.display = 'flex';
+    openModal(logsModal);
     switchLogsTab('sync');
   });
   btnOpenBridgeLogs?.addEventListener('click', () => {
-    logsModal.style.display = 'flex';
+    openModal(logsModal);
     switchLogsTab('bridge');
   });
   btnOpenHistory?.addEventListener('click', () => {
-    logsModal.style.display = 'flex';
+    openModal(logsModal);
     switchLogsTab('history');
   });
-  logsCloseBtn?.addEventListener('click', () => logsModal.style.display = 'none');
-  logsCancelBtn?.addEventListener('click', () => logsModal.style.display = 'none');
+  logsCloseBtn?.addEventListener('click', () => closeModal(logsModal));
+  logsCancelBtn?.addEventListener('click', () => closeModal(logsModal));
 
   function switchLogsTab(tab) {
     tabSyncLogs.className = tab === 'sync' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
@@ -381,8 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
     jobForm.reset();
     document.getElementById('job-id').value = '';
     document.getElementById('job-target-dir').value = globalConfig?.moviesDir || '/media/MoviesVoyo';
-    renderGenreCheckboxes([]);
-    jobModal.style.display = 'flex';
+    openModal(jobModal);
   });
 
   function openEditJobModal(jobId) {
@@ -402,11 +417,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('job-naming').value = job.languagePreference || 'sl';
 
     renderGenreCheckboxes(job.selectedGenres || []);
-    jobModal.style.display = 'flex';
+    openModal(jobModal);
   }
 
-  jobModalCloseBtn?.addEventListener('click', () => jobModal.style.display = 'none');
-  jobModalCancelBtn?.addEventListener('click', () => jobModal.style.display = 'none');
+  jobModalCloseBtn?.addEventListener('click', () => closeModal(jobModal));
+  jobModalCancelBtn?.addEventListener('click', () => closeModal(jobModal));
 
   // Save Job Form
   jobForm?.addEventListener('submit', async (e) => {
@@ -439,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Opravilo uspešno shranjeno!', 'success');
         allJobs = data.jobs;
         renderJobsList(allJobs);
-        jobModal.style.display = 'none';
+        closeModal(jobModal);
         updateQuickStats();
       } else {
         showToast(`Napaka: ${data.message}`, 'error');
@@ -468,11 +483,11 @@ document.addEventListener('DOMContentLoaded', () => {
     trackSeriesUrlInput.value = seriesUrl;
     trackTargetDirInput.value = targetDir || globalConfig?.showsDir || '/media/ShowsVoyo';
     trackModalSeriesDisplay.textContent = seriesName;
-    trackModal.style.display = 'flex';
+    openModal(trackModal);
   }
 
-  trackModalCloseBtn?.addEventListener('click', () => trackModal.style.display = 'none');
-  trackModalCancelBtn?.addEventListener('click', () => trackModal.style.display = 'none');
+  trackModalCloseBtn?.addEventListener('click', () => closeModal(trackModal));
+  trackModalCancelBtn?.addEventListener('click', () => closeModal(trackModal));
 
   trackModalForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -507,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`Začeto spremljanje serije "${seriesName}"!`, 'success');
         allJobs = data.jobs;
         renderJobsList(allJobs);
-        trackModal.style.display = 'none';
+        closeModal(trackModal);
         updateQuickStats();
 
         // Immediately trigger first check in background
@@ -552,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.success) {
         showToast('Nastavitve shranjene!', 'success');
         globalConfig = data.config;
-        settingsModal.style.display = 'none';
+        closeModal(settingsModal);
         updateQuickStats();
       } else {
         showToast(`Napaka: ${data.message}`, 'error');
@@ -883,11 +898,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    fileEditorModal.style.display = 'flex';
+    openModal(fileEditorModal);
   }
 
-  fileEditorCloseBtn?.addEventListener('click', () => fileEditorModal.style.display = 'none');
-  fileEditorCancelBtn?.addEventListener('click', () => fileEditorModal.style.display = 'none');
+  fileEditorCloseBtn?.addEventListener('click', () => closeModal(fileEditorModal));
+  fileEditorCancelBtn?.addEventListener('click', () => closeModal(fileEditorModal));
 
   fileEditorSaveBtn?.addEventListener('click', async () => {
     const filePath = fileEditorPath.textContent;
@@ -901,7 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (data.success) {
         showToast('Datoteka uspešno shranjena!', 'success');
-        fileEditorModal.style.display = 'none';
+        closeModal(fileEditorModal);
       } else {
         showToast(`Napaka: ${data.message}`, 'error');
       }
@@ -917,6 +932,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentPreviewTab = 'all'; // 'all' | 'shows' | 'movies'
   let previewSortColumn = 'year'; // default sort by year descending
   let previewSortDirection = 'desc'; // 'asc' | 'desc'
+  let activePreviewFilters = null; // Filter context passed from Job modal or custom
 
   function updateSortHeaderIcons() {
     const iconTitle = document.getElementById('sort-icon-title');
@@ -955,13 +971,27 @@ document.addEventListener('DOMContentLoaded', () => {
       triggerBtn.textContent = 'Nalaganje...';
     }
 
-    // Determine initial tab based on context
+    // Determine filter context and tab based on caller
     const jobMediaTypeSelect = document.getElementById('job-media-type');
     const jobNameInput = document.getElementById('job-name');
     const jobTypeVal = jobMediaTypeSelect?.value || '';
     const jobNameVal = (jobNameInput?.value || '').toLowerCase();
 
     if (triggerBtn === jobPreviewBtn) {
+      // Capture filters from current Job modal inputs
+      const minYearVal = parseInt(document.getElementById('job-min-year')?.value, 10);
+      const minRatingVal = parseFloat(document.getElementById('job-min-rating')?.value);
+      const titleFilterVal = document.getElementById('job-title-filter')?.value?.trim() || '';
+      const selectedGenreInputs = Array.from(document.querySelectorAll('#genre-checkbox-container input[name="selectedGenres"]:checked'));
+      const selectedGenres = selectedGenreInputs.map(cb => cb.value.trim());
+
+      activePreviewFilters = {
+        minYear: !isNaN(minYearVal) ? minYearVal : null,
+        minRating: !isNaN(minRatingVal) ? minRatingVal : null,
+        titleFilter: titleFilterVal || null,
+        genres: selectedGenres
+      };
+
       if (jobTypeVal === 'movies' || jobNameVal.includes('film')) {
         currentPreviewTab = 'movies';
       } else if (jobTypeVal === 'shows' || jobNameVal.includes('serij')) {
@@ -971,6 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } else if (!forceRefresh) {
       currentPreviewTab = 'all';
+      activePreviewFilters = null;
     }
 
     updatePreviewTabButtons();
@@ -1000,7 +1031,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSortHeaderIcons();
         renderPreviewModal(currentPreviewItems);
         updateSelectedButtonState();
-        previewModal.style.display = 'flex';
+        openModal(previewModal);
       } else {
         showToast(`Predogled ni uspel: ${data.message}`, 'error');
       }
@@ -1062,6 +1093,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function clearActivePreviewFilters() {
+    activePreviewFilters = null;
+    renderPreviewModal(currentPreviewItems);
+  }
+
   function renderPreviewModal(items = []) {
     if (!previewItemsBody) return;
 
@@ -1069,6 +1105,32 @@ document.addEventListener('DOMContentLoaded', () => {
     let tabFiltered = items;
     if (currentPreviewTab === 'shows') tabFiltered = items.filter(it => it.isSeries);
     else if (currentPreviewTab === 'movies') tabFiltered = items.filter(it => !it.isSeries);
+
+    // Apply job filters if opened from Job Modal
+    if (activePreviewFilters) {
+      if (activePreviewFilters.minYear) {
+        tabFiltered = tabFiltered.filter(it => it.year && parseInt(it.year, 10) >= activePreviewFilters.minYear);
+      }
+      if (activePreviewFilters.titleFilter) {
+        const tf = activePreviewFilters.titleFilter.toLowerCase();
+        tabFiltered = tabFiltered.filter(it => {
+          const t = (it.title || it.name || '').toLowerCase();
+          const u = (it.url || '').toLowerCase();
+          return t.includes(tf) || u.includes(tf);
+        });
+      }
+      if (activePreviewFilters.genres && activePreviewFilters.genres.length > 0) {
+        const requiredGenres = activePreviewFilters.genres.map(g => g.toLowerCase());
+        tabFiltered = tabFiltered.filter(it => {
+          if (!it.genres || it.genres.length === 0) {
+            // Check if title or url matches any genre keyword
+            const txt = ((it.title || '') + ' ' + (it.url || '')).toLowerCase();
+            return requiredGenres.some(g => txt.includes(g));
+          }
+          return it.genres.some(g => requiredGenres.includes(g.toLowerCase()));
+        });
+      }
+    }
 
     const q = (previewSearchInput?.value || '').toLowerCase().trim();
     let filtered = tabFiltered.filter(it => (it.title || it.name || '').toLowerCase().includes(q));
@@ -1095,7 +1157,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const tabLabel = currentPreviewTab === 'shows' ? 'serij' : (currentPreviewTab === 'movies' ? 'filmov' : 'vsebin');
-    previewSummaryTags.innerHTML = `<span style="color:#a78bfa; font-weight:600;">Skupaj ${tabLabel}: ${tabFiltered.length} (Prikazano: ${Math.min(filtered.length, 300)} od ${filtered.length})</span>`;
+    let summaryHtml = `<span style="color:#a78bfa; font-weight:600;">Skupaj ${tabLabel}: ${tabFiltered.length} (Prikazano: ${Math.min(filtered.length, 300)} od ${filtered.length})</span>`;
+
+    if (activePreviewFilters && (activePreviewFilters.minYear || activePreviewFilters.titleFilter || (activePreviewFilters.genres && activePreviewFilters.genres.length > 0))) {
+      const pills = [];
+      if (activePreviewFilters.minYear) pills.push(`Leto &ge; ${activePreviewFilters.minYear}`);
+      if (activePreviewFilters.titleFilter) pills.push(`Filter: "${escapeHtml(activePreviewFilters.titleFilter)}"`);
+      if (activePreviewFilters.genres && activePreviewFilters.genres.length > 0) pills.push(`Žanri: ${activePreviewFilters.genres.join(', ')}`);
+      
+      summaryHtml += `
+        <div style="margin-top: 0.35rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <span style="font-size:0.75rem; color:#94a3b8;">Filtri opravila:</span>
+          ${pills.map(p => `<span style="font-size:0.75rem; background:#3b82f620; color:#60a5fa; border:1px solid #3b82f640; border-radius:4px; padding:0.1rem 0.4rem;">${p}</span>`).join('')}
+          <button type="button" class="btn btn-sm btn-outline" id="btn-clear-preview-filters" style="font-size:0.7rem; padding:0.1rem 0.4rem; color:#cbd5e1;">✕ Počisti filtre</button>
+        </div>
+      `;
+    }
+
+    previewSummaryTags.innerHTML = summaryHtml;
+    document.getElementById('btn-clear-preview-filters')?.addEventListener('click', clearActivePreviewFilters);
 
     if (filtered.length === 0) {
       previewItemsBody.innerHTML = '<tr><td colspan="5" style="padding:1.5rem; text-align:center; color:#64748b;">Ni zadetkov za iskani filter v tem zavihku.</td></tr>';
@@ -1187,11 +1267,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (data.success) {
         showToast(`✅ Prenos zagnan v ozadju! Spremljajte potek v dnevnikih.`, 'success');
-        previewModal.style.display = 'none';
-        if (jobModal) jobModal.style.display = 'none';
+        closeModal(previewModal);
+        if (jobModal) closeModal(jobModal);
         // Open sync logs tab so user can watch progress
         if (logsModal) {
-          logsModal.style.display = 'flex';
+          openModal(logsModal);
           switchLogsTab('sync');
         }
       } else {
@@ -1240,8 +1320,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSelectedButtonState();
   });
 
-  previewCloseBtn?.addEventListener('click', () => previewModal.style.display = 'none');
-  previewCancelBtn?.addEventListener('click', () => previewModal.style.display = 'none');
+  previewCloseBtn?.addEventListener('click', () => closeModal(previewModal));
+  previewCancelBtn?.addEventListener('click', () => closeModal(previewModal));
 
   // Render History Audit List
   function renderHistory(history = []) {
