@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="sl">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JellyVoyo - Multi-Job Sync & Stream Bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <div class="logo-icon" style="font-size: 2rem; margin-right: 0.75rem;">🎬</div>
+        <div>
+          <h1>JellyVoyo</h1>
+          <span class="subtitle">Voyo.si to Jellyfin .strm Sync & Streaming Bridge</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+        <span class="live-tag" id="sync-running-tag" style="display:none; margin-right: 0.4rem;">SYNCING...</span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-open-sync-logs">📜 Sync Dnevniki</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-open-bridge-logs">⚡ Bridge Stream</button>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-open-history">📅 Zgodovina</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="toggle-settings-btn">⚙️ Nastavitve</button>
+      </div>
+    </header>
+
+    <!-- Global Settings Modal Popup -->
+    <div id="settings-modal" class="modal">
+      <div class="modal-content" style="max-width: 820px; width: 95%;">
+        <div class="modal-header">
+          <div>
+            <h3>🔐 Voyo & Jellyfin Integracija</h3>
+            <span class="subtitle">Prijava na Voyo.si, izbira profila, pretok (Bridge) in samodejno osveževanje Jellyfin knjižnice.</span>
+          </div>
+          <button type="button" class="modal-close-btn" id="close-settings-btn">&times;</button>
+        </div>
+
+        <form id="global-settings-form">
+          <div class="modal-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="username">Voyo E-naslov</label>
+                <input type="text" id="username" name="username" required autocomplete="username"
+                  placeholder="uporabnik@example.com" />
+              </div>
+              <div class="form-group">
+                <label for="password">Voyo Geslo</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password"
+                  placeholder="••••••••" />
+              </div>
+              <div class="form-group">
+                <label for="profileId">Voyo Profil</label>
+                <select id="profileId" name="profileId">
+                  <option value="">Izberi profil (samodejno)...</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="grid-column: span 2;">
+                <label for="bridgeUrl">Bridge URL v .strm (za Jellyfin)</label>
+                <input type="text" id="bridgeUrl" name="bridgeUrl" required
+                  placeholder="http://jellyvoyo:3851 ali http://192.168.1.100:3851" />
+                <span class="field-hint">Naslov, preko katerega bo Jellyfin dosegel ta bridge strežnik za predvajanje .strm vsebin.</span>
+              </div>
+              <div class="form-group">
+                <label for="port">Vrata strežnika (Port)</label>
+                <input type="number" id="port" name="port" required value="3851" />
+              </div>
+            </div>
+
+            <!-- Jellyfin Auto-Refresh Integration Sub-section -->
+            <div
+              style="margin-top: 1rem; padding: 1rem; background: rgba(0, 164, 228, 0.07); border: 1px solid rgba(0, 164, 228, 0.25); border-radius: 8px;">
+              <div
+                style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                <div style="font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 0.5rem;">
+                  <span>🍿 Jellyfin Samodejno Osveževanje</span>
+                </div>
+                <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="jellyfinAutoRefresh" name="jellyfinAutoRefresh" checked />
+                  <span>Samodejno osveži Jellyfin knjižnico ob novih vsebinah</span>
+                </label>
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="grid-column: span 2;">
+                  <label for="jellyfinUrl">Jellyfin URL Strežnika</label>
+                  <input type="text" id="jellyfinUrl" name="jellyfinUrl"
+                    placeholder="http://jellyfin:8096 ali http://192.168.1.100:8096" />
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                  <label for="jellyfinApiKey">Jellyfin API Ključ (Nadzorna plošča &rarr; API ključi)</label>
+                  <input type="text" id="jellyfinApiKey" name="jellyfinApiKey" placeholder="npr. 48f93a1c..." />
+                </div>
+              </div>
+              <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                <button type="button" class="btn btn-outline btn-sm" id="test-jellyfin-btn">🔗 Preizkusi Jellyfin povezavo / Osveži zdaj</button>
+              </div>
+            </div>
+
+            <!-- Maintenance Tools Section -->
+            <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+              <!-- Subtitle Mass Conversion Tool -->
+              <div style="padding: 0.85rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                  <strong style="color: #fcd34d; font-size: 0.875rem;">Množični pretvornik podnapisov (VTT &rarr; SRT)</strong>
+                  <p style="color: #94a3b8; font-size: 0.775rem; margin-top: 0.15rem;">Preglej vse mape in samodejno pretvori .vtt podnapise v standardni .srt format.</p>
+                </div>
+                <button type="button" class="btn btn-warning btn-sm" id="mass-convert-subtitles-btn">🔄 Pretvori vse VTT v SRT</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+            <button type="button" class="btn btn-outline btn-sm" id="test-auth-btn">🔐 Preizkusi Voyo Prijavo</button>
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" class="btn btn-secondary" id="cancel-settings-btn">Prekliči</button>
+              <button type="submit" class="btn btn-primary" id="save-settings-btn">💾 Shrani Nastavitve</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Quick Status Bar -->
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 0.85rem 1.25rem;">
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Aktivna opravila</span>
+        <h4 id="stat-active-jobs" style="margin-top: 0.25rem; font-size: 1.15rem;">0</h4>
+      </div>
+      <div style="flex: 1; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 0.85rem 1.25rem;">
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Status Sinhronizacije</span>
+        <h4 id="stat-sync-status" style="margin-top: 0.25rem; font-size: 1.15rem; color: #34d399;">Pripravljen</h4>
+      </div>
+      <div style="flex: 1; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 0.85rem 1.25rem;">
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Jellyfin Integracija</span>
+        <h4 id="stat-jellyfin-status" style="margin-top: 0.25rem; font-size: 1.15rem;">-</h4>
+      </div>
+    </div>
+
+    <!-- Main 2-Column Dashboard Grid -->
+    <div class="main-dashboard-grid">
+      <!-- Left Column: Sync Jobs -->
+      <div class="dashboard-col left-col">
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <h2>📋 Sinhronizacijska Opravila</h2>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-quick-preview" title="Odpri katalog in izberi posamezne vsebine za takojšnji prenos">🔍 Predogled & Prenos</button>
+              <button type="button" class="btn btn-success btn-sm" id="create-job-btn">➕ Novo Opravilo</button>
+            </div>
+          </div>
+
+          <div class="jobs-grid" id="jobs-grid-container">
+            <!-- Dynamically rendered Job Cards -->
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column: Graphical Media File Explorer -->
+      <div class="dashboard-col right-col">
+        <section class="card explorer-card">
+          <div class="card-header">
+            <div>
+              <h2>📁 Raziskovalec Datotek</h2>
+            </div>
+            <div class="explorer-header-actions" style="display: flex; gap: 0.4rem; align-items: center;">
+              <select id="explorer-root-select" class="form-control"
+                style="background:#111827; color:#f3f4f6; border:1px solid #374151; border-radius:6px; padding:0.35rem 0.5rem; font-size:0.8rem; max-width: 170px;">
+                <option value="">Izberi mapo...</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm" id="explorer-refresh-btn"
+                title="Osveži mapo">🔄</button>
+            </div>
+          </div>
+
+          <div class="explorer-container">
+            <!-- Breadcrumbs Navigation -->
+            <div class="explorer-breadcrumbs" id="explorer-breadcrumbs">
+              <span class="breadcrumb-item active">📁 Medijska mapa</span>
+            </div>
+
+            <!-- Quick Filter Box -->
+            <div class="explorer-toolbar"
+              style="margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+              <div style="position: relative; flex: 1;">
+                <input type="text" id="explorer-search-input" placeholder="🔍 Filtriraj datoteke v mapi..."
+                  style="width: 100%; background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 0.35rem 0.6rem; color: #f3f4f6; font-size: 0.825rem;" />
+              </div>
+              <div id="explorer-item-count" style="font-size: 0.8rem; color: #9ca3af; white-space: nowrap;">Nalaganje...
+              </div>
+            </div>
+
+            <!-- File Table View -->
+            <div class="explorer-table-wrapper"
+              style="overflow-x: auto; max-height: 520px; border: 1px solid #262c3b; border-radius: 8px; background: #0c101a;">
+              <table class="explorer-table"
+                style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+                <thead>
+                  <tr
+                    style="background: #141a29; color: #94a3b8; border-bottom: 1px solid #262c3b; position: sticky; top: 0; z-index: 10;">
+                    <th style="padding: 0.5rem 0.7rem;">Ime</th>
+                    <th style="padding: 0.5rem 0.7rem; width: 75px;">Tip</th>
+                    <th style="padding: 0.5rem 0.7rem; width: 85px;">Velikost</th>
+                    <th style="padding: 0.5rem 0.7rem; width: 120px; text-align: right;">Dejanja</th>
+                  </tr>
+                </thead>
+                <tbody id="explorer-table-body">
+                  <tr>
+                    <td colspan="4" style="padding: 1.5rem; text-align: center; color: #64748b;">Izberite mapo za raziskovanje.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Create / Edit Job Modal -->
+    <div id="job-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h3 id="job-modal-title">⚙️ Konfiguriraj Opravilo</h3>
+            <span class="subtitle">Določite ciljno mapo, urnik sinhronizacije ter filtre kataloga Voyo.</span>
+          </div>
+          <button type="button" class="modal-close-btn" id="job-modal-close-btn">&times;</button>
+        </div>
+
+        <form id="job-form">
+          <div class="modal-body">
+            <input type="hidden" id="job-id" name="id" />
+
+            <div class="form-row">
+              <div class="form-group" style="grid-column: span 2;">
+                <label for="job-name">Ime Opravila</label>
+                <input type="text" id="job-name" name="name" required
+                  placeholder="npr. 🎬 Voyo Filmi ali 📺 Voyo Serije" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="job-target-dir">Ciljna Mapa (Host / Kontejner pot)</label>
+                <input type="text" id="job-target-dir" name="targetDir" required
+                  placeholder="npr. /media/MoviesVoyo ali /media/ShowsVoyo" />
+              </div>
+              <div class="form-group">
+                <label for="job-schedule">Urnik Samodejne Sinhronizacije</label>
+                <select id="job-schedule" name="schedule">
+                  <option value="disabled">Onemogočeno (Samo ročni zagon)</option>
+                  <option value="every_1h">Vsako 1 uro</option>
+                  <option value="every_2h">Vsaki 2 uri</option>
+                  <option value="every_4h">Vsake 4 ure</option>
+                  <option value="every_6h">Vsakih 6 ur</option>
+                  <option value="every_8h">Vsakih 8 ur</option>
+                  <option value="every_12h">Vsakih 12 ur</option>
+                  <option value="every_24h">Vsakih 24 ur (Dnevno)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="job-media-type">Obseg Vsebin</label>
+                <select id="job-media-type" name="mediaTypeFilter">
+                  <option value="all">Vse (Filmi & TV Serije)</option>
+                  <option value="movies">Samo Filmi</option>
+                  <option value="shows">Samo TV Serije</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="job-item-limit">Omejitev Vsebin (0 = Vse)</label>
+                <input type="number" id="job-item-limit" name="itemLimit" min="0" max="5000" placeholder="0 (Vse)" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="job-min-year">Minimalno Leto Izdaje</label>
+                <input type="number" id="job-min-year" name="minYear" min="1900" max="2030"
+                  placeholder="npr. 2015 (Neobvezno)" />
+              </div>
+              <div class="form-group">
+                <label for="job-min-rating">Minimalna Ocena (0 - 10)</label>
+                <input type="number" id="job-min-rating" name="minRating" min="0" max="10" step="0.5"
+                  placeholder="npr. 7.0 (Neobvezno)" />
+              </div>
+              <div class="form-group">
+                <label for="job-naming">Poimenovanje Map</label>
+                <select id="job-naming" name="languagePreference">
+                  <option value="sl">Slovensko ime (Priporočeno)</option>
+                  <option value="en">Angleško prvo ime</option>
+                  <option value="dual">Dvojno ime (Slovensko - Angleško)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Genre Checklist Filter -->
+            <div class="form-group">
+              <div class="genre-header-row">
+                <label>Filtri po Žanrih & Značkah</label>
+                <div class="genre-quick-actions">
+                  <button type="button" class="btn-text" id="genre-select-all">Izberi vse</button>
+                  <span>•</span>
+                  <button type="button" class="btn-text" id="genre-clear-all">Počisti vse</button>
+                  <span>•</span>
+                  <button type="button" class="btn-text" id="genre-slo-only">🇸🇮 Slovenske Vsebine</button>
+                </div>
+              </div>
+              <div class="genre-grid" id="genre-checkbox-container">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="job-modal-cancel-btn">Prekliči</button>
+            <button type="button" class="btn btn-info" id="job-preview-btn">🔍 Predogled Vsebin</button>
+            <button type="submit" class="btn btn-primary" id="job-save-btn">💾 Shrani Opravilo</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="preview-modal" class="modal">
+      <div class="modal-content" style="max-width: 1000px; width: 95%;">
+        <div class="modal-header">
+          <div>
+            <h3 id="preview-title">🔍 Predogled Sinhronizacije</h3>
+            <span class="subtitle" id="preview-subtitle">Preverjanje ujemajočih se vsebin...</span>
+          </div>
+          <button type="button" class="modal-close-btn" id="preview-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="preview-filters-summary" id="preview-summary-tags"></div>
+
+          <!-- Media Type Filter Tabs & Quick Actions -->
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+            <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+              <button type="button" class="btn btn-sm btn-primary" id="preview-tab-all">Vse (<span id="preview-count-all">0</span>)</button>
+              <button type="button" class="btn btn-sm btn-secondary" id="preview-tab-shows">📺 Samo Serije (<span id="preview-count-shows">0</span>)</button>
+              <button type="button" class="btn btn-sm btn-secondary" id="preview-tab-movies">🎬 Samo Filmi (<span id="preview-count-movies">0</span>)</button>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="preview-refresh-btn" title="Ponovno preglej Voyo sitemape">🔄 Osveži katalog</button>
+          </div>
+
+          <!-- Preview Toolbar -->
+          <div class="preview-toolbar"
+            style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+            <div style="position: relative; flex: 1; min-width: 250px;">
+              <input type="text" id="preview-search-input" placeholder="🔍 Išči po naslovu ali žanru..."
+                style="width: 100%; background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 0.45rem 0.75rem; color: #f3f4f6; font-size: 0.85rem;" />
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <button type="button" class="btn btn-outline btn-sm" id="preview-select-all-btn">Izberi Vse</button>
+              <button type="button" class="btn btn-outline btn-sm" id="preview-deselect-all-btn">Počisti Vse</button>
+            </div>
+          </div>
+
+          <!-- Preview Table -->
+          <div style="max-height: 480px; overflow-y: auto; border: 1px solid #262c3b; border-radius: 8px;">
+            <table class="preview-table" style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+              <thead>
+                <tr style="background: #141a29; color: #94a3b8; border-bottom: 1px solid #262c3b; position: sticky; top: 0; z-index: 10;">
+                  <th style="padding: 0.6rem 0.8rem; width: 40px; text-align: center;">✓</th>
+                  <th style="padding: 0.6rem 0.8rem;">Naslov Vsebine</th>
+                  <th style="padding: 0.6rem 0.8rem; width: 90px;">Tip</th>
+                  <th style="padding: 0.6rem 0.8rem; width: 80px;">Leto</th>
+                  <th style="padding: 0.6rem 0.8rem; width: 110px; text-align: right;">Akcija</th>
+                </tr>
+              </thead>
+              <tbody id="preview-items-body">
+                <!-- Dynamically filled -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <button type="button" class="btn btn-secondary" id="preview-cancel-btn">Zapri</button>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span id="preview-selected-counter-text" style="font-size: 0.85rem; color: #94a3b8;">Izbrano: 0 vsebin</span>
+            <button type="button" class="btn btn-primary" id="preview-sync-selected-btn" disabled>▶️ Prenesi izbrano (0)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div id="logs-modal" class="modal">
+      <div class="modal-content" style="max-width: 960px; width: 95%;">
+        <div class="modal-header">
+          <div>
+            <h3 id="logs-modal-title">📜 Dnevniki delovanja</h3>
+            <span class="subtitle">Živo spremljanje procesov sinhronizacije in streaming mostu.</span>
+          </div>
+          <button type="button" class="modal-close-btn" id="logs-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="terminal-nav" style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <button type="button" class="btn btn-sm btn-primary" id="tab-sync-logs">📜 Dnevniki Sinhronizacije</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="tab-bridge-logs">⚡ Bridge Pretok</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="tab-job-history">📅 Zgodovina Zagonov</button>
+            <button type="button" class="btn btn-sm btn-outline" id="clear-logs-btn" style="margin-left: auto;">Počisti</button>
+          </div>
+
+          <div id="log-output-container">
+            <pre id="log-output" class="terminal-view"></pre>
+            <pre id="bridge-log-output" class="terminal-view" style="display:none;"></pre>
+            <div id="history-container" style="display:none;">
+              <div id="history-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="logs-cancel-btn">Zapri</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- File Editor / Viewer Modal -->
+    <div id="file-editor-modal" class="modal">
+      <div class="modal-content" style="max-width: 850px; width: 95%;">
+        <div class="modal-header">
+          <div>
+            <h3 id="file-editor-title">📄 Urejanje Datoteke</h3>
+            <span class="subtitle" id="file-editor-path"></span>
+          </div>
+          <button type="button" class="modal-close-btn" id="file-editor-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="file-image-preview-container" style="display: none; text-align: center; padding: 1rem;">
+            <img id="file-image-preview" src="" alt="Predogled Slike" style="max-width: 100%; max-height: 450px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);" />
+          </div>
+          <div id="file-editor-textarea-container">
+            <textarea id="file-editor-content" style="width: 100%; height: 420px; background: #0c101a; color: #f3f4f6; border: 1px solid #262c3b; border-radius: 8px; padding: 0.75rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; resize: vertical;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="file-editor-cancel-btn">Zapri</button>
+          <button type="button" class="btn btn-primary" id="file-editor-save-btn">💾 Shrani Spremembe</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast" style="display: none;"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+
+</html>

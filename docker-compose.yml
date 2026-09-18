@@ -1,0 +1,29 @@
+services:
+  jellyvoyo:
+    container_name: jellyvoyo
+    image: jellyvoyo:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3851:3851"
+    environment:
+      - PORT=3851
+      - CONFIG_PATH=/config/config.json
+      - MOVIES_DIR=/media/MoviesVoyo
+      - SHOWS_DIR=/media/ShowsVoyo
+      - BRIDGE_URL=http://jellyvoyo:3851
+      - VOYO_USERNAME=your_email@example.com
+      - VOYO_PASSWORD=your_voyo_password
+    volumes:
+      # Persistent config storage
+      - /DATA/AppData/jellyvoyo/config:/config
+      # Same host media path as Jellyfin
+      - /DATA/Media:/media
+    networks:
+      - deanNetwork
+
+networks:
+  deanNetwork:
+    external: true
